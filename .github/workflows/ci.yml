@@ -1,0 +1,53 @@
+name: CI
+
+# Lint, typecheck, test, build. Callable, so a deploy workflow runs exactly this and
+# ships only what passed — no second definition of "green".
+on:
+  pull_request:
+  workflow_call:
+  # A new advisory against a dependency you already have arrives without a commit,
+  # so the audit in `pnpm verify` has to run on a schedule too.
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+# `next build` sets NODE_ENV=production, which drops the development defaults, so the
+# build fails without these. Deliberately literal, not repository variables: CI compiles
+# a throwaway artefact. The real values are environment-scoped and read by deploy.yml.
+env:
+  NEXT_PUBLIC_API_URL: http://localhost:4000/api/v1
+  NEXT_PUBLIC_APP_NAME: Enterprise
+
+jobs:
+  verify:
+    name: Verify
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out
+        uses: actions/checkout@v7
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Restore the Next.js build cache
+        uses: actions/cache@v6
+        with:
+          path: .next/cache
+          key: next-${{ hashFiles('pnpm-lock.yaml') }}-${{ hashFiles('src/**') }}
+          restore-keys: next-${{ hashFiles('pnpm-lock.yaml') }}-
+
+      - name: Typecheck, lint, format, knip, test, audit, build
+        run: pnpm verify

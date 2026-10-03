@@ -1,0 +1,241 @@
+@import "tailwindcss";
+
+/* The single source of colour and radius. Components use semantic tokens only —
+   never a raw palette utility (`bg-<hue>-500`), which is why one is not written
+   out here: Tailwind scans comments too. Rebranding is this file alone. */
+
+/* `dark:` follows the explicit choice on <html>, not just the OS. Tailwind's
+   default variant is media-query only, which a toggle can never override. */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+/* shadcn/ui variable names, so `pnpm dlx shadcn add <component>` drops in unedited. */
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-field: var(--field);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-info: var(--info);
+  --color-info-foreground: var(--info-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-overlay: var(--overlay);
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+/* ── The elevation ladder ─────────────────────────────────────────────────────
+   Four planes, stacked in the same order in both themes: the page recedes,
+   panels sit on it, floating things sit above those, and a field is the panel
+   plane with a firmer border. Light separates them with white-on-grey and a
+   shadow; dark cannot — a shadow is invisible on black — so it steps lightness
+   instead. The *relationship* is what stays constant, which is why the sidebar
+   reads as a rail and a dropdown reads as floating in either theme.
+
+     --background   the page canvas    <body>, the area beside the sidebar
+     --card         a panel on it      sidebar, header, <Card>, <DataTable>
+     --popover      floating above     dropdown, popover, dialog, toast
+     --field        an input's fill    <Input>, every trigger, command search
+
+   A surface is chosen no other way. `bg-background` anywhere but the page reads
+   as a hole punched through it, and the one control that used to paint its own
+   dark-mode fill (`dark:bg-input/30` on an outline button) is exactly why a
+   search box and the select beside it used to be two different colours.
+   ──────────────────────────────────────────────────────────────────────────── */
+
+/* ── The brand ────────────────────────────────────────────────────────────────
+   Three numbers, and the first is the one you change. Every colour below is
+   built from them, in both themes, so rebranding the app is editing one line and
+   nothing else — not a component, not the dark block, not the focus ring.
+
+     --brand-h   the hue angle, 0–360. 264 is indigo. Roughly: 25 red, 75 amber,
+                 145 green, 220 sky, 264 indigo, 300 purple.
+     --brand-c   how saturated the brand itself is. Set it to 0 and the app is
+                 the neutral greyscale it shipped as.
+     --tint-c    how far that hue bleeds into the greys. A whisper by default —
+                 enough that the canvas, borders and panels belong to the brand
+                 rather than sitting beside it. 0 for true neutral greys.
+
+   Chroma is a ceiling, not a promise: a hue a display cannot reach at a given
+   lightness is mapped into gamut as a whole colour, not clipped per channel,
+   which is the reason for working in oklch rather than hsl.
+   ──────────────────────────────────────────────────────────────────────────── */
+
+:root {
+  --brand-h: 264;
+  --brand-c: 0.17;
+  --tint-c: 0.008;
+
+  --radius: 0.625rem;
+
+  --background: oklch(0.985 var(--tint-c) var(--brand-h));
+  --foreground: oklch(0.145 var(--tint-c) var(--brand-h));
+  /* White is white: chroma has nowhere to go at this lightness, which is why the
+     three panel tokens are the one place the tint does not reach. */
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 var(--tint-c) var(--brand-h));
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.145 var(--tint-c) var(--brand-h));
+  --field: oklch(1 0 0);
+  --primary: oklch(0.52 var(--brand-c) var(--brand-h));
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.93 var(--tint-c) var(--brand-h));
+  --secondary-foreground: oklch(0.205 var(--tint-c) var(--brand-h));
+  --muted: oklch(0.965 var(--tint-c) var(--brand-h));
+  /* 4.8:1 on the canvas, so the 35 places that label something stay legible. */
+  --muted-foreground: oklch(0.54 var(--tint-c) var(--brand-h));
+  /* The one interactive neutral, so it carries more of the hue than the rest: an
+     active nav item and a hovered menu row are where the brand should be felt. */
+  --accent: oklch(0.95 calc(var(--brand-c) * 0.18) var(--brand-h));
+  --accent-foreground: oklch(0.42 var(--brand-c) var(--brand-h));
+  /* Semantic colours keep their own hue — a success is green whatever the brand
+     is — and so do the foregrounds that sit on them. */
+  --destructive: oklch(0.577 0.245 27.325);
+  --destructive-foreground: oklch(0.985 0 0);
+  --success: oklch(0.63 0.15 150);
+  --success-foreground: oklch(0.985 0 0);
+  --warning: oklch(0.75 0.15 75);
+  --warning-foreground: oklch(0.205 0 0);
+  --info: oklch(0.6 0.13 245);
+  --info-foreground: oklch(0.985 0 0);
+  --border: oklch(0.922 var(--tint-c) var(--brand-h));
+  --input: oklch(0.9 var(--tint-c) var(--brand-h));
+  --overlay: oklch(0 0 0 / 50%); /* dialog scrim */
+
+  /* Not a value of its own: the focus ring is the brand, so colouring --primary
+     colours it too. Declared once — `var()` resolves against whichever --primary
+     the active theme block set, which is why there is no copy below. */
+  --ring: var(--primary);
+}
+
+/* One dark block, one selector. `data-theme` is always an explicit "light" or
+   "dark": the script in the document head resolves a "system" preference to one
+   of them before first paint, so there is no second copy of these values behind
+   a media query and no way for the two to drift. */
+:root[data-theme="dark"] {
+  --background: oklch(0.145 var(--tint-c) var(--brand-h));
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.205 var(--tint-c) var(--brand-h));
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.245 var(--tint-c) var(--brand-h));
+  --popover-foreground: oklch(0.985 0 0);
+  --field: oklch(0.205 var(--tint-c) var(--brand-h));
+  /* Lighter than its light-mode twin, and a little less saturated with it: no
+     display reaches full chroma this high up, so asking for it only invites the
+     gamut mapper to pick the shade instead of this file. */
+  --primary: oklch(0.72 calc(var(--brand-c) * 0.75) var(--brand-h));
+  --primary-foreground: oklch(0.205 0 0);
+  --secondary: oklch(0.3 var(--tint-c) var(--brand-h));
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.26 var(--tint-c) var(--brand-h));
+  --muted-foreground: oklch(0.708 var(--tint-c) var(--brand-h));
+  /* Dark needs more hue than light to read as tinted at all — the same 0.03 that
+     is plainly lavender at L 0.95 is invisible at L 0.3. */
+  --accent: oklch(0.3 calc(var(--brand-c) * 0.4) var(--brand-h));
+  --accent-foreground: oklch(0.93 calc(var(--brand-c) * 0.3) var(--brand-h));
+  --destructive: oklch(0.704 0.191 22.216);
+  --destructive-foreground: oklch(0.985 0 0);
+  --success: oklch(0.7 0.15 150);
+  --success-foreground: oklch(0.205 0 0);
+  --warning: oklch(0.8 0.15 75);
+  --warning-foreground: oklch(0.205 0 0);
+  --info: oklch(0.68 0.13 245);
+  --info-foreground: oklch(0.205 0 0);
+  --border: oklch(1 0 0 / 12%);
+  --input: oklch(1 0 0 / 18%);
+  --overlay: oklch(0 0 0 / 65%); /* darker: the page behind is already dark */
+}
+
+@layer base {
+  * {
+    border-color: var(--color-border);
+    /* Firefox. The platform scrollbar is chunky and carries arrow buttons; this is the
+       same control at the app's weight, following the theme like everything else. */
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+
+  /* WebKit and Blink need the parts spelled out. */
+  ::-webkit-scrollbar {
+    width: 0.5rem;
+    height: 0.5rem;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background-color: var(--border);
+    border-radius: 9999px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: var(--muted-foreground);
+  }
+
+  /* The stepper arrows at each end are a platform habit nothing here needs. */
+  ::-webkit-scrollbar-button {
+    display: none;
+  }
+
+  ::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-family:
+      ui-sans-serif,
+      system-ui,
+      -apple-system,
+      "Segoe UI",
+      Roboto,
+      "Helvetica Neue",
+      Arial,
+      sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+}
+
+/* The browser repaints an autofilled field itself, so a saved email sits next to a dark
+   password box looking like a different control. `:autofill` is what Firefox reads, the
+   prefixed one is WebKit and Blink, and this sits outside `@layer base` because an
+   unlayered rule outranks every layer — no utility can quietly win it back. The inset
+   shadow is --field, not --background: an input is a field wherever it is mounted. */
+input:autofill,
+input:autofill:hover,
+input:autofill:focus,
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+input:-webkit-autofill:active {
+  -webkit-text-fill-color: var(--foreground);
+  -webkit-box-shadow: 0 0 0 1000px var(--field) inset;
+  box-shadow: 0 0 0 1000px var(--field) inset;
+  caret-color: var(--foreground);
+  /* Firefox tints rather than repaints; the filter is what that tint rides on. */
+  filter: none;
+  transition: background-color 9999s ease-in-out 0s;
+}

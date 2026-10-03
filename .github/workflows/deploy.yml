@@ -1,0 +1,127 @@
+name: Deploy
+
+# Build once, push to ECR, and roll the EC2 service via SSH.
+# The environment is an input, so staging and production differ by one argument.
+on:
+  workflow_call:
+    inputs:
+      environment:
+        description: GitHub environment to deploy into.
+        required: true
+        type: string
+
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Environment to deploy into
+        required: true
+        type: environment
+
+# `id-token: write` is what lets the run assume the AWS role. Without it the OIDC
+# exchange fails and the job runs with no credentials at all.
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: deploy-${{ inputs.environment }}
+  cancel-in-progress: false
+
+env:
+  APP: enterprise-frontend
+
+jobs:
+  deploy:
+    name: Build, push to ECR and restart
+    runs-on: ubuntu-latest
+
+    environment:
+      name: ${{ inputs.environment }}
+      url: ${{ vars.APP_URL }}
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v7
+
+      - name: Require the build, AWS and SSH variables
+        env:
+          NEXT_PUBLIC_API_URL: ${{ vars.NEXT_PUBLIC_API_URL }}
+          NEXT_PUBLIC_APP_NAME: ${{ vars.NEXT_PUBLIC_APP_NAME }}
+          AWS_ROLE_ARN: ${{ vars.AWS_ROLE_ARN }}
+          AWS_REGION: ${{ vars.AWS_REGION }}
+          SSH_HOST: ${{ vars.SSH_HOST }}
+          SSH_USER: ${{ vars.SSH_USER }}
+        run: |
+          fail=0
+          for name in NEXT_PUBLIC_API_URL NEXT_PUBLIC_APP_NAME AWS_ROLE_ARN AWS_REGION SSH_HOST SSH_USER; do
+            [ -n "${!name}" ] || { echo "::error::Set $name for ${{ inputs.environment }}"; fail=1; }
+          done
+          exit $fail
+
+      - name: Assume the AWS role
+        uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          role-session-name: gha-${{ env.APP }}-${{ inputs.environment }}
+
+      - name: Sign in to ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Build and push the image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: true
+          provenance: false
+          tags: |
+            ${{ steps.ecr.outputs.registry }}/${{ vars.ECR_REPOSITORY || 'enterprise-frontend' }}:${{ github.sha }}
+            ${{ steps.ecr.outputs.registry }}/${{ vars.ECR_REPOSITORY || 'enterprise-frontend' }}:${{ inputs.environment }}
+          build-args: |
+            NEXT_PUBLIC_API_URL=${{ vars.NEXT_PUBLIC_API_URL }}
+            NEXT_PUBLIC_APP_NAME=${{ vars.NEXT_PUBLIC_APP_NAME }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Restart over SSH
+        env:
+          SSH_HOST: ${{ vars.SSH_HOST }}
+          SSH_USER: ${{ vars.SSH_USER }}
+          SSH_KEY: ${{ secrets.SSH_KEY }}
+          IMAGE: ${{ steps.ecr.outputs.registry }}/${{ vars.ECR_REPOSITORY || 'enterprise-frontend' }}:${{ github.sha }}
+          AWS_REGION: ${{ vars.AWS_REGION }}
+        run: |
+          set -euo pipefail
+
+          install -m 700 -d ~/.ssh
+          install -m 600 /dev/null ~/.ssh/id_deploy
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/id_deploy
+          ssh-keyscan -H "$SSH_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+          SSH="ssh -i ~/.ssh/id_deploy -o BatchMode=yes $SSH_USER@$SSH_HOST"
+
+          # Log the host in from the runner's own ECR token — the host needs neither
+          # the AWS CLI nor an instance profile.
+          aws ecr get-login-password --region "$AWS_REGION" \
+            | $SSH "docker login --username AWS --password-stdin ${{ steps.ecr.outputs.registry }}"
+
+          $SSH "APP=$APP IMAGE=$IMAGE PORT=${{ vars.APP_PORT || '3000' }} bash -s" <<'REMOTE'
+          set -euo pipefail
+          docker pull "$IMAGE"
+
+          docker rm -f "$APP" 2>/dev/null || true
+          docker run -d --name "$APP" \
+            --restart unless-stopped \
+            -p "$PORT:3000" \
+            --log-driver json-file --log-opt max-size=10m --log-opt max-file=3 \
+            "$IMAGE"
+
+          docker image prune -f
+          REMOTE
+
+      - name: Smoke test
+        if: vars.APP_URL != ''
+        run: curl -fsS --retry 10 --retry-delay 6 --retry-all-errors "${{ vars.APP_URL }}/healthz"

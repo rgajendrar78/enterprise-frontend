@@ -1,0 +1,16 @@
+# Explicit allow-list of packages permitted to run install scripts.
+allowBuilds:
+  "@tailwindcss/oxide": true # native CSS engine
+  esbuild: true # used by vitest
+  sharp: true # next/image optimisation
+  unrs-resolver: true # native module resolver used by the eslint plugins
+  "@scarf/scarf": false # telemetry only
+
+# Refuse versions published less than a day ago (compromised-release window).
+minimumReleaseAge: 1440
+minimumReleaseAgeExclude:
+  - "@typescript-eslint/*"
+  - typescript-eslint
+  - knip
+  - next
+  - eslint-config-next
